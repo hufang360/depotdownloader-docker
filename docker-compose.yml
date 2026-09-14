@@ -1,0 +1,17 @@
+services:
+  depotdownloader:
+    build:
+      context: .
+      args:
+        # 与上游发布标签保持一致（标签形如 DepotDownloader_<version>）
+        DD_VERSION: "3.4.0"
+    image: depotdownloader:3.4.0
+    container_name: DepotDownloader
+    # 登录 Steam（密码 + 2FA）需要交互式 stdin/TTY
+    stdin_open: true
+    tty: true
+    volumes:
+      # account.config 与下载的 depot 持久化在此
+      - ./steam:/steam
+    # 在服务名后追加参数，例如：
+    #   docker compose run --rm depotdownloader -app 730 -os windows

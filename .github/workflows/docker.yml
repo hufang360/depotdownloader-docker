@@ -1,0 +1,66 @@
+name: Build and push Docker image
+
+# 打 tag（如 v3.4.0）时自动构建多架构镜像并推送到 Docker Hub。
+# 也可以在 Actions 页面手动触发（workflow_dispatch）。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          # 需在仓库 Settings -> Secrets and variables -> Actions 中配置：
+          #   DOCKERHUB_USERNAME = hufang360
+          #   DOCKERHUB_TOKEN    = Docker Hub 的 Access Token
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 从 tag 推导 DepotDownloader 版本号：v3.4.0 -> 3.4.0
+      # 手动触发（非 tag）时，回退到 Dockerfile 里的默认 DD_VERSION
+      - name: Resolve DepotDownloader version
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            v="$(sed -n 's/^ARG DD_VERSION=//p' Dockerfile | head -1)"
+          fi
+          echo "dd_version=$v" >> "$GITHUB_OUTPUT"
+
+      # 镜像 tag：v3.4.0 -> 3.4.0，并额外打上 latest
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: hufang360/depotdownloader
+          tags: |
+            type=match,pattern=v(.*),group=1
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            DD_VERSION=${{ steps.ver.outputs.dd_version }}
+          provenance: false
+          sbom: false
